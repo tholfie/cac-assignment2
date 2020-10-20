@@ -7,7 +7,7 @@ Parameters:
   Key:
     Description: The key that is used for connecting to an instance with SSH
     Type: String
-    Default: KeyTH01
+    Default: key02
   StandardImage:
     Description: The AMI for the elastic and kibana instances (Amazon Linux 2 is default)
     Type: String
@@ -29,16 +29,16 @@ Resources:
           Value: Automation
       SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: 80
-        ToPort: 80
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
         FromPort: 22
         ToPort: 22
         CidrIp: 0.0.0.0/0
       - IpProtocol: tcp
         FromPort: 2377
         ToPort: 2377
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
         CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
       - IpProtocol: tcp
@@ -50,6 +50,22 @@ Resources:
         ToPort: 443
         CidrIp: 0.0.0.0/0
       - IpProtocol: tcp
+        FromPort: 5601
+        ToPort: 5601
+        CidrIp: !ImportValue Base01:PublicSubnet01CIDR
+      - IpProtocol: tcp
+        FromPort: 5601
+        ToPort: 5601
+        CidrIp: !ImportValue Base01:PublicSubnet02CIDR
+      - IpProtocol: tcp
+        FromPort: 9200
+        ToPort: 9200
+        CidrIp: !ImportValue Base01:PrivateSubnet01CIDR
+      - IpProtocol: tcp
+        FromPort: 9200
+        ToPort: 9200
+        CidrIp: !ImportValue Base01:PrivateSubnet02CIDR
+      - IpProtocol: tcp
         FromPort: 2049
         ToPort: 2049
         CidrIp: 0.0.0.0/0
@@ -58,6 +74,7 @@ Resources:
         ToPort: 2377
         CidrIp: 0.0.0.0/0
 
+
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Creates a launch configuration for the auto-scaling group. the instance creates an apache webserver and filebeat log shipper.
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -65,8 +82,8 @@ Resources:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       ImageId: !Ref StandardImage
-      InstanceType: t2.small
-      IamInstanceProfile: !ImportValue DockerManager:PullProfile
+      InstanceType: t2.micro
+      IamInstanceProfile: !ImportValue DockerManager:PushProfile
       KeyName: !Ref Key
       UserData:
         Fn::Base64: !Sub
@@ -74,10 +91,13 @@ Resources:
             #!/bin/bash
             sudo -i
             yum -y update
+            yum -y install git
+            yum -y install nfs-utils
             yum -y install docker
             service docker start
             ls | aws ecr get-login --no-include-email --region us-east-1 | xargs -L 1 xargs -t
-            docker pull 393113325631.dkr.ecr.us-east-1.amazonaws.com/test-repository
+            docker pull ${ECRDashboardID}
+            docker pull ${ECRFormID}
             mkdir /usr/share/docker-storage
             chown ec2-user:ec2-user /usr/share/docker-storage
             chmod ugo+rw /usr/share/docker-storage
@@ -86,8 +106,31 @@ Resources:
             docker swarm join \
                 --token $DOCKERTOKEN \
                 ${ManagerIP}:2377
-          - EFSID: !ImportValue EFS01:EFSID
-            ManagerIP: !ImportValue DockerManager:ManagerIp
+            cd /etc/yum.repos.d/
+            sudo rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+            cat > elastic.repo <<EOF
+            [elastic-7.x]
+            name=Elastic repository for 7.x packages
+            baseurl=https://artifacts.elastic.co/packages/7.x/yum
+            gpgcheck=1
+            gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+            enabled=1
+            autorefresh=1
+            type=rpm-md
+            EOF
+            yum -y install filebeat
+            cd /etc/filebeat
+            sed -i 's/enabled: false/enabled: true/g' filebeat.yml
+            sed -i 's/#host: "localhost:5601"/host: "${KibanaIP}:5601"/g' filebeat.yml
+            sed -i 's/hosts: \["localhost:9200"\]/  hosts: ["${ElasticSearchIP}:9200"]/g' filebeat.yml
+            systemctl enable filebeat
+            systemctl start filebeat
+          - KibanaIP: !ImportValue EFKStack01:KibanaIP
+            ElasticSearchIP: !ImportValue EFKStack01:ElasticSearchIP
+            EFSID: !ImportValue SharedEFS01:EFSID
+            ECRDashboardID: !ImportValue ECR01:ECRDashboardID
+            ECRFormID: !ImportValue ECR01:ECRFormID
+            ManagerIP: !ImportValue BroadBuildServer01:ManagerIp
       SecurityGroups:
         - !Ref AutoscaleSecurityGroup
 
@@ -108,7 +151,7 @@ Resources:
         - !ImportValue Base01:PublicSubnet02:us-east-1b
       LaunchConfigurationName: !Ref WebServerLaunchConfiguration01
       TargetGroupARNs:
-        - !ImportValue LB01:TargetGroup01Arn
+        - !ImportValue PublicLoadBalancer01:TargetGroup01Arn
       HealthCheckType: EC2
       HealthCheckGracePeriod: 60
 
@@ -123,5 +166,5 @@ Resources:
       TargetTrackingConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: ALBRequestCountPerTarget
-          ResourceLabel: !Join [ '/', [ !ImportValue LB01:PublicLoadBalancer01, !ImportValue LB01:TargetGroup01 ] ]
+          ResourceLabel: !Join [ '/', [ !ImportValue PublicLoadBalancer01:PublicLoadBalancer01, !ImportValue PublicLoadBalancer01:TargetGroup01 ] ]
         TargetValue: 1000
