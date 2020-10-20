@@ -1,0 +1,45 @@
+Description: Creates a public bucket that's possible to write to.
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#S3 Bucket and policy
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      BucketName: internationalcoviddashboard
+      WebsiteConfiguration:
+        IndexDocument: NHS.html
+        ErrorDocument: NHS.html
+
+  S3Policy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn: S3Bucket
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - "s3:*"
+            Effect: "Allow"
+            Resource:
+              Fn::Join:
+                - ""
+                -
+                  - "arn:aws:s3:::"
+                  -
+                    Ref: "S3Bucket"
+                  - "/*"
+            Principal: "*"
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Outputs for further reference
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs:
+  PublicInstance01Ref:
+    Description: Reference to the s3 bucket that has been created
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", S3Bucket ] ]

@@ -1,0 +1,133 @@
+Description: Creates a public load balancer to sit in front of auto-scaled ec2 instances.
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a Security Group for the Public LoadBalancer
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  LoadBalancerSecurityGroup01:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for public LB that routes to the covid-19 dashboard
+      VpcId: !ImportValue Base01:VPC
+      Tags:
+        - Key: Name
+          Value: LoadBalancerSecurityGroup01
+        - Key: Module
+          Value: Automation
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+
+  LoadBalancerSecurityGroup02:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for public LB that routes to the nhs form
+      VpcId: !ImportValue Base01:VPC
+      Tags:
+        - Key: Name
+          Value: LoadBalancerSecurityGroup01
+        - Key: Module
+          Value: Automation
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a public load balancer that lets traffic flow to the auto-scaled webservers
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  PublicLoadBalancer01Dashboard:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: PublicLoadBalancer01
+      SecurityGroups: [ !Ref LoadBalancerSecurityGroup01 ]
+      Subnets: [!ImportValue Base01:PublicSubnet01:us-east-1a, !ImportValue Base01:PublicSubnet02:us-east-1b]
+  Listener01:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup01
+      LoadBalancerArn: !Ref PublicLoadBalancer01Dashboard
+      Port: 80
+      Protocol: HTTP
+  TargetGroup01:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: PublicInstances01
+      VpcId: !ImportValue Base01:VPC
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: "/dashboard/"
+
+  PublicLoadBalancer02Form:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: PublicLoadBalancer02
+      SecurityGroups: [ !Ref LoadBalancerSecurityGroup02 ]
+      Subnets: [ !ImportValue Base01:PublicSubnet01:us-east-1a, !ImportValue Base01:PublicSubnet02:us-east-1b ]
+  Listener02:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup02
+      LoadBalancerArn: !Ref PublicLoadBalancer02Form
+      Port: 80
+      Protocol: HTTP
+  TargetGroup02:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: PublicInstances02
+      VpcId: !ImportValue Base01:VPC
+      Port: 8080
+      Protocol: HTTP
+      HealthCheckPath: "/"
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Exports All necessary LB information
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs:
+  TargetGroup01Ref:
+      Description: TargetGroup
+      Value: !GetAtt TargetGroup01.TargetGroupFullName
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", TargetGroup01 ] ]
+  TargetGroup01ARNRef:
+      Description: TargetGroup
+      Value: !Ref TargetGroup01
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", TargetGroup01Arn ] ]
+  PublicLoadBalancer01Ref:
+      Description: PublicLoadBalancer full name
+      Value: !GetAtt PublicLoadBalancer01Dashboard.LoadBalancerFullName
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer01Dashboard ] ]
+  PublicLoadBalancer01ARNRef:
+      Description: PublicLoadBalancer Arn
+      Value: !Ref PublicLoadBalancer01Dashboard
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer01DashboardArn ] ]
+  PublicLoadBalancer02Ref:
+    Description: PublicLoadBalancer full name
+    Value: !GetAtt PublicLoadBalancer02Form.LoadBalancerFullName
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer02Form ] ]
+  PublicLoadBalancer02ARNRef:
+    Description: PublicLoadBalancer Arn
+    Value: !Ref PublicLoadBalancer02Form
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer02FormArn ] ]

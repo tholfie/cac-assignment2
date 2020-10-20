@@ -1,0 +1,170 @@
+Description: Creates a group of publically available Instances containing a Covid-19 dashboards that are load-balanced by an elb. furhtermore, These instances are in an auto scaling group to manage load.
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Key name for SSH access and AMI id for the instances. better to leave the ami default because of the yum package manager.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Parameters:
+  Key:
+    Description: The key that is used for connecting to an instance with SSH
+    Type: String
+    Default: key02
+  StandardImage:
+    Description: The AMI for the elastic and kibana instances (Amazon Linux 2 is default)
+    Type: String
+    Default: ami-0947d2ba12ee1ff75
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a security group for the public webservers. they need to send logs to elastic and connect to kibana.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  AutoscaleSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for public subnet
+      VpcId: !ImportValue Base01:VPC
+      Tags:
+        - Key: Name
+          Value: AutoscaleSecurityGroup
+        - Key: Module
+          Value: Automation
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 2377
+        ToPort: 2377
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5601
+        ToPort: 5601
+        CidrIp: !ImportValue Base01:PublicSubnet01CIDR
+      - IpProtocol: tcp
+        FromPort: 5601
+        ToPort: 5601
+        CidrIp: !ImportValue Base01:PublicSubnet02CIDR
+      - IpProtocol: tcp
+        FromPort: 9200
+        ToPort: 9200
+        CidrIp: !ImportValue Base01:PrivateSubnet01CIDR
+      - IpProtocol: tcp
+        FromPort: 9200
+        ToPort: 9200
+        CidrIp: !ImportValue Base01:PrivateSubnet02CIDR
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 2377
+        ToPort: 2377
+        CidrIp: 0.0.0.0/0
+
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a launch configuration for the auto-scaling group. the instance creates an apache webserver and filebeat log shipper.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  WebServerLaunchConfiguration01:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref StandardImage
+      InstanceType: t2.micro
+      IamInstanceProfile: !ImportValue DockerManager:PushProfile
+      KeyName: !Ref Key
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            sudo -i
+            yum -y update
+            yum -y install git
+            yum -y install nfs-utils
+            yum -y install docker
+            service docker start
+            ls | aws ecr get-login --no-include-email --region us-east-1 | xargs -L 1 xargs -t
+            docker pull ${ECRDashboardID}
+            docker pull ${ECRFormID}
+            mkdir /usr/share/docker-storage
+            chown ec2-user:ec2-user /usr/share/docker-storage
+            chmod ugo+rw /usr/share/docker-storage
+            mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ${EFSID}.efs.us-east-1.amazonaws.com:/ /usr/share/docker-storage
+            DOCKERTOKEN=`cat /usr/share/docker-storage/worker-join-token.txt`
+            docker swarm join \
+                --token $DOCKERTOKEN \
+                ${ManagerIP}:2377
+            cd /etc/yum.repos.d/
+            sudo rpm --import https://packages.elastic.co/GPG-KEY-elasticsearch
+            cat > elastic.repo <<EOF
+            [elastic-7.x]
+            name=Elastic repository for 7.x packages
+            baseurl=https://artifacts.elastic.co/packages/7.x/yum
+            gpgcheck=1
+            gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+            enabled=1
+            autorefresh=1
+            type=rpm-md
+            EOF
+            yum -y install filebeat
+            cd /etc/filebeat
+            sed -i 's/enabled: false/enabled: true/g' filebeat.yml
+            sed -i 's/#host: "localhost:5601"/host: "${KibanaIP}:5601"/g' filebeat.yml
+            sed -i 's/hosts: \["localhost:9200"\]/  hosts: ["${ElasticSearchIP}:9200"]/g' filebeat.yml
+            systemctl enable filebeat
+            systemctl start filebeat
+          - KibanaIP: !ImportValue EFKStack01:KibanaIP
+            ElasticSearchIP: !ImportValue EFKStack01:ElasticSearchIP
+            EFSID: !ImportValue SharedEFS01:EFSID
+            ECRDashboardID: !ImportValue ECR01:ECRDashboardID
+            ECRFormID: !ImportValue ECR01:ECRFormID
+            ManagerIP: !ImportValue BroadBuildServer01:ManagerIp
+      SecurityGroups:
+        - !Ref AutoscaleSecurityGroup
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates the scaling group. min and maxsize need to be within the constraints of the AWS accounts.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  ScalingGroup01:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MaxSize: "3"
+      MinSize: "2"
+      DesiredCapacity: "2"
+      AvailabilityZones:
+        - !ImportValue Base01:us-east-1a
+        - !ImportValue Base01:us-east-1b
+      VPCZoneIdentifier:
+        - !ImportValue Base01:PublicSubnet01:us-east-1a
+        - !ImportValue Base01:PublicSubnet02:us-east-1b
+      LaunchConfigurationName: !Ref WebServerLaunchConfiguration01
+      TargetGroupARNs:
+        - !ImportValue PublicLoadBalancer01:TargetGroup01Arn
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 60
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Scaling Policy. creates a new instance when the amount of requests hits 1000 per minute.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  ScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ScalingGroup01
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: !Join [ '/', [ !ImportValue PublicLoadBalancer01:PublicLoadBalancer01, !ImportValue PublicLoadBalancer01:TargetGroup01 ] ]
+        TargetValue: 1000

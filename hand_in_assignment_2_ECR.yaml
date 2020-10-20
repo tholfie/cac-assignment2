@@ -1,0 +1,65 @@
+Resources:
+  ECRREPDashboard:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "covid-19-dashboard"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - "*"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+
+  ECRREPForm:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "covid-19-registration-form"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - "*"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+Outputs:
+  ECRDashboardNameRef:
+    Description: ECRDashboardName
+    Value: !Ref ECRREPDashboard
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRDashboardName ] ]
+  ECRDashboardID:
+    Description: ECRDashboardID
+    Value: !Join [".",[!Sub "${AWS::AccountId}", "dkr", "ecr", !Sub "${AWS::Region}", "amazonaws", "com/covid-19-dashboard"]]
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRDashboardID] ]
+  ECRFormNameRef:
+    Description: ECRFormName
+    Value: !Ref ECRREPForm
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRFormName ] ]
+  ECRFormID:
+    Description: ECRFormID
+    Value: !Join [".",[!Sub "${AWS::AccountId}", "dkr", "ecr", !Sub "${AWS::Region}", "amazonaws", "com/covid-19-registration-form"]]
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRFormID] ]
