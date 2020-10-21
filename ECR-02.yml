@@ -1,0 +1,55 @@
+Resources:
+  ECRDASHBOARD: 
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: "covid-19-dashboard"
+      RepositoryPolicyText: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Sid: AllowPushPull
+            Effect: Allow
+            Principal: 
+              AWS: 
+                - "*"
+            Action: 
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+  ECRFORM: 
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: "covid-19-form"
+      RepositoryPolicyText: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Sid: AllowPushPull
+            Effect: Allow
+            Principal: 
+              AWS: 
+                - "*"
+            Action: 
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+
+Outputs:
+  DashboardID:
+    Description: Reference to the ECR ID from Dashboard repository
+    Value: !Join [".",[!Sub "${AWS::AccountId}", "dkr", "ecr", !Sub "${AWS::Region}", "amazonaws", "com/covid-19-dashboard"]]
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRDashboardID ] ]
+  FormID:
+    Description: Reference to the ECR ID from FORM repository
+    Value: !Join [".",[!Sub "${AWS::AccountId}", "dkr", "ecr", !Sub "${AWS::Region}", "amazonaws", "com/covid-19-form"]]
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ECRFormID ] ]

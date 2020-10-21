@@ -1,0 +1,101 @@
+Description: Creates a MongoDB instance that contains Covid testing data
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#A Key needs to be defined to connect to the instance using SSH
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Parameters:
+  Key:
+    Description: The key that is used for connecting to an instance with SSH
+    Type: String
+    Default: key02
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a security group for mongoDB
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  MongoDBSecurityGroup01:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for MongoDB
+      VpcId: !ImportValue Base01:VPC
+      Tags:
+        - Key: Name
+          Value: MongoDBSecurityGroup01
+        - Key: Module
+          Value: Automation
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 27017
+        ToPort: 27017
+        CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates A mongoDB instance and uploads COVID JSON data to itself
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  MongoDB01:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-06b263d6ceff0b3dd
+      InstanceType: t2.medium
+      KeyName: !Ref Key
+      Tags:
+        - Key: Name
+          Value: MongoDB
+        - Key: Module
+          Value: Automation
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: "0"
+          GroupSet: [ !Ref MongoDBSecurityGroup01 ]
+          SubnetId: !ImportValue Base01:PrivateSubnet01:us-east-1a
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            sudo -i
+            apt-get -y update
+            wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
+            echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+            sudo apt-get update
+            sudo apt-get install -y mongodb-org
+            echo "mongodb-org hold" | sudo dpkg --set-selections
+            echo "mongodb-org-server hold" | sudo dpkg --set-selections
+            echo "mongodb-org-shell hold" | sudo dpkg --set-selections
+            echo "mongodb-org-mongos hold" | sudo dpkg --set-selections
+            echo "mongodb-org-tools hold" | sudo dpkg --set-selections
+            sudo systemctl start mongod
+            sudo systemctl enable mongod
+            sudo sed -i 's/127.0.0.1/0.0.0.0/' /etc/mongod.conf
+            apt-get -y install git
+            mkdir /jsondata/
+            cd /jsondata/
+            git clone https://github.com/broadinstitute/covid19-testing.git
+            cd /jsondata/covid19-testing/
+            sed -i '265!d' index.html > data.json
+            mv index.html data.json
+            sed -i 's/let data = //g' data.json
+            sed -i 's/;//g' data.json
+            mongoimport --jsonArray --db test --collection docs --file data.json
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Exports the MongoDB ID
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs:
+  MongoDB01:
+    Description: Reference to the ID of the mongoDB Instance
+    Value: !Ref MongoDB01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicInstance01 ] ]

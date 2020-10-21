@@ -1,0 +1,263 @@
+
+Description: This template contains a VPC, four subnets and two availability zones.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Parameters for this stack
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Parameters:
+  VPCCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC.
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCIDR01:
+    Description: Please enter the IP range (CIDR notation) for the first subnet
+    Type: String
+    Default: 10.0.1.0/24
+  PrivateSubnetCIDR01:
+    Description: Please enter the IP range (CIDR notation) for the second subnet
+    Type: String
+    Default: 10.0.51.0/24
+  PublicSubnetCIDR02:
+    Description: Please enter the IP range (CIDR notation) for the third subnet
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnetCIDR02:
+    Description: Please enter the IP range (CIDR notation) for the fourth subnet
+    Type: String
+    Default: 10.0.52.0/24
+  AvailabilityZone01:
+    Description: Please enter the name of the first AZ in your region e.g <us-east-1a>. this AZ will be linked to private and public subnet 01
+    Type: String
+    Default: us-east-1a
+  AvailabilityZone02:
+    Description: Please enter the name of the second AZ in your region e.g <us-east-1a>. this AZ will be linked to private and public subnet 02
+    Type: String
+    Default: us-east-1b
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a VPC
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      CidrBlock: !Ref VPCCIDR
+      Tags:
+        - Key: Name
+          Value: VPC
+        - Key: Module
+          Value: Automation
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#This resource creates four subnets, two private and two public. There will also be two availability zones, each zone will contain one private and one public subnet.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  PublicSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetCIDR01
+      MapPublicIpOnLaunch: true 
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone01
+      Tags:
+        - Key: Name
+          Value: PublicSubnet01
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Public
+  PublicSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetCIDR02
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone02
+      Tags:
+        - Key: Name
+          Value: PublicSubnet02
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Public
+  PrivateSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PrivateSubnetCIDR01
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone01
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet01
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Private
+  PrivateSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PrivateSubnetCIDR02
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone02
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet02
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Private
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#This resource creates an Internet gateway and attaches it to the VPC
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  InternetGateway01:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway01
+        - Key: Module
+          Value: Automation
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway01
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#This resource creates two route tables and attaches it to the subnets. a public route table to public subnets and a private route table to private subnets.
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  PublicRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable01
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Public
+  PublicRoute01:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway01
+  PublicSubnetRouteTableAssociation01:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicSubnet01
+    Properties:
+      RouteTableId: !Ref PublicRouteTable01
+      SubnetId: !Ref PublicSubnet01
+  PublicSubnetRouteTableAssociation02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicSubnet02
+    Properties:
+      RouteTableId: !Ref PublicRouteTable01
+      SubnetId: !Ref PublicSubnet02
+  PrivateRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable01
+        - Key: Module
+          Value: Automation
+        - Key: Access
+          Value: Private
+  PrivateSubnetRouteTableAssociation01:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PrivateSubnet01
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      SubnetId: !Ref PrivateSubnet01
+  PrivateSubnetRouteTableAssociation02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PrivateSubnet02
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      SubnetId: !Ref PrivateSubnet02
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Outputs are located here
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs:
+  VPCRef:
+    Description: Reference to the ID of the VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", VPC ] ]
+  PublicSubnet01Ref:
+    Description: References the ID of the first public subnet including its availability zone
+    Value: !Ref PublicSubnet01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicSubnet01, !Ref AvailabilityZone01 ] ]
+  PublicSubnet02Ref:
+    Description: References the ID of the second public subnet including its availability zone
+    Value: !Ref PublicSubnet02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicSubnet02, !Ref AvailabilityZone02 ] ]
+  PrivateSubnet01Ref:
+    Description: References the ID of the first private subnet including its availability zone
+    Value: !Ref PrivateSubnet01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PrivateSubnet01, !Ref AvailabilityZone01 ] ]
+  PrivateSubnet02Ref:
+    Description: References the ID of the second private subnet including its availability zone
+    Value: !Ref PrivateSubnet02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PrivateSubnet02, !Ref AvailabilityZone02 ] ]
+  InternetGateway01Ref:
+    Description: References the Internet Gateway created for the VPC
+    Value: !Ref InternetGateway01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", InternetGateway01 ] ]
+  PublicRouteTable01Ref:
+    Description: The public route table created for the VPC
+    Value: !Ref PublicRouteTable01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicRouteTable01] ]
+  PrivateRouteTable01Ref:
+    Description: The public route table created for the VPC
+    Value: !Ref PrivateRouteTable01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PrivateRouteTable01] ]
+  AvailabilityZone01Ref:
+    Description: The name of the first AZ
+    Value: !Ref AvailabilityZone01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", !Ref AvailabilityZone01] ]
+  AvailabilityZone02Ref:
+    Description: The name of the first AZ
+    Value: !Ref AvailabilityZone02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", !Ref AvailabilityZone02] ]
+  PublicSubnet01CIDRRef:
+    Description: References the CIDR block of the first public subnet
+    Value: !Ref PublicSubnetCIDR01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicSubnet01CIDR ] ]
+  PublicSubnet02CIDRRef:
+    Description: References the CIDR block of the second public subnet
+    Value: !Ref PublicSubnetCIDR02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicSubnet02CIDR ] ]
+  PrivateSubnet01CIDRRef:
+    Description: References the CIDR block of the first private subnet
+    Value: !Ref PrivateSubnetCIDR01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PrivateSubnet01CIDR ] ]
+  PrivateSubnet02CIDRRef:
+    Description: References the CIDR block of the second private subnet
+    Value: !Ref PrivateSubnetCIDR02
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", PrivateSubnet02CIDR ] ]
+  VPCCIDRRef:
+    Description: Reference to the CIDR block of the VPC
+    Value: !Ref VPCCIDR
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", VPCCIDR ] ]

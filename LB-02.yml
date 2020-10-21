@@ -115,19 +115,19 @@ Outputs:
       Description: PublicLoadBalancer full name
       Value: !GetAtt PublicLoadBalancer01Dashboard.LoadBalancerFullName
       Export:
-        Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer01Dashboard ] ]
+        Name: !Join [ ":", [ !Ref "AWS::StackName", LBDashboard ] ]
   PublicLoadBalancer01ARNRef:
       Description: PublicLoadBalancer Arn
       Value: !Ref PublicLoadBalancer01Dashboard
       Export:
-        Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer01DashboardArn ] ]
+        Name: !Join [ ":", [ !Ref "AWS::StackName", LBDashboardArn ] ]
   PublicLoadBalancer02Ref:
     Description: PublicLoadBalancer full name
     Value: !GetAtt PublicLoadBalancer02Form.LoadBalancerFullName
     Export:
-      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer02Form ] ]
+      Name: !Join [ ":", [ !Ref "AWS::StackName", LBForm ] ]
   PublicLoadBalancer02ARNRef:
     Description: PublicLoadBalancer Arn
     Value: !Ref PublicLoadBalancer02Form
     Export:
-      Name: !Join [ ":", [ !Ref "AWS::StackName", PublicLoadBalancer02FormArn ] ]
+      Name: !Join [ ":", [ !Ref "AWS::StackName", LBFormArn ] ]

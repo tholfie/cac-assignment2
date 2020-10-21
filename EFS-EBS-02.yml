@@ -1,0 +1,96 @@
+Description: Creates an EFS en EBS for elasticsearch, ebs is set to retain so after stack deletion the EBS needs to be deleted manually
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Security Group for NFS
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Resources:
+  EFSSecurityGroup01:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for public subnet
+      VpcId: !ImportValue Base01:VPC
+      Tags:
+        - Key: Name
+          Value: EFSSecurityGroup01
+        - Key: Module
+          Value: Automation
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates an EFS with Client mount, write and root access
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  ElasticFileSystem01:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: false
+      PerformanceMode: generalPurpose
+      FileSystemTags:
+        - Key: Name
+          Value: SharedEFS01
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "elasticfilesystem:ClientMount"
+              - "elasticfilesystem:ClientWrite"
+              - "elasticfilesystem:ClientRootAccess"
+            Principal:
+              AWS: "*"
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Mounts The EFS to the public subnets and the two availability zone
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  MountPublicSubnet01:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref ElasticFileSystem01
+      SecurityGroups: [ !Ref EFSSecurityGroup01 ]
+      SubnetId: !ImportValue Base01:PublicSubnet01:us-east-1a
+
+  MountPublicSubnet02:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref ElasticFileSystem01
+      SecurityGroups: [ !Ref EFSSecurityGroup01 ]
+      SubnetId: !ImportValue Base01:PublicSubnet02:us-east-1b
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Creates a 100gb volume for elasticsearch
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  ElasticsearchVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 100
+      Encrypted: false
+      AvailabilityZone: !ImportValue Base01:us-east-1b
+      Tags:
+        - Key: Name
+          Value: Elastic01Volume
+        - Key: Module
+          Value: Automation
+    DeletionPolicy: Retain
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Exports EFS and EBS ID's for use in other stacks
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs:
+  ElasticsearchVolumeRef:
+    Description: Reference to the ID of the elasticsearch EBS
+    Value: !Ref ElasticsearchVolume
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", ElasticsearchVolume ] ]
+  EFSIDRef:
+    Description: Reference to the ID of the Elastic File System
+    Value: !Ref ElasticFileSystem01
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", EFSID ] ]
