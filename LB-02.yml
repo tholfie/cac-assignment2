@@ -4,10 +4,10 @@ Description: Creates a public load balancer to sit in front of auto-scaled ec2 i
 #Creates a Security Group for the Public LoadBalancer
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Resources:
-  LoadBalancerSecurityGroup01:
+  LBSGDashboard:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for public LB that routes to the covid-19 dashboard
+      GroupDescription: Security group for public LB that loadbalances Dashboard traffic
       VpcId: !ImportValue Base01:VPC
       Tags:
         - Key: Name
@@ -25,10 +25,11 @@ Resources:
         ToPort: 80
         CidrIp: 0.0.0.0/0
 
-  LoadBalancerSecurityGroup02:
+
+  LBSGForm:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for public LB that routes to the nhs form
+      GroupDescription: Security group for public LB that loadbalances Form traffic
       VpcId: !ImportValue Base01:VPC
       Tags:
         - Key: Name
@@ -36,24 +37,24 @@ Resources:
         - Key: Module
           Value: Automation
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 8080
-          CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 8080
+        CidrIp: 0.0.0.0/0
 
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Creates a public load balancer that lets traffic flow to the auto-scaled webservers
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  PublicLoadBalancer01Dashboard:
+  LBDashboard:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: PublicLoadBalancer01
-      SecurityGroups: [ !Ref LoadBalancerSecurityGroup01 ]
+      Name: LBDashboard
+      SecurityGroups: [ !Ref LBSGDashboard ]
       Subnets: [!ImportValue Base01:PublicSubnet01:us-east-1a, !ImportValue Base01:PublicSubnet02:us-east-1b]
   Listener01:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -61,7 +62,7 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup01
-      LoadBalancerArn: !Ref PublicLoadBalancer01Dashboard
+      LoadBalancerArn: !Ref LBDashboard
       Port: 80
       Protocol: HTTP
   TargetGroup01:
@@ -73,19 +74,19 @@ Resources:
       Protocol: HTTP
       HealthCheckPath: "/dashboard/"
 
-  PublicLoadBalancer02Form:
+  LBForm:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: PublicLoadBalancer02
-      SecurityGroups: [ !Ref LoadBalancerSecurityGroup02 ]
-      Subnets: [ !ImportValue Base01:PublicSubnet01:us-east-1a, !ImportValue Base01:PublicSubnet02:us-east-1b ]
+      Name: LBForm
+      SecurityGroups: [ !Ref LBSGForm ]
+      Subnets: [!ImportValue Base01:PublicSubnet01:us-east-1a, !ImportValue Base01:PublicSubnet02:us-east-1b]
   Listener02:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup02
-      LoadBalancerArn: !Ref PublicLoadBalancer02Form
+      LoadBalancerArn: !Ref LBForm
       Port: 80
       Protocol: HTTP
   TargetGroup02:
@@ -96,7 +97,6 @@ Resources:
       Port: 8080
       Protocol: HTTP
       HealthCheckPath: "/"
-
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Exports All necessary LB information
 #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -111,23 +111,33 @@ Outputs:
       Value: !Ref TargetGroup01
       Export:
         Name: !Join [ ":", [ !Ref "AWS::StackName", TargetGroup01Arn ] ]
-  PublicLoadBalancer01Ref:
-      Description: PublicLoadBalancer full name
-      Value: !GetAtt PublicLoadBalancer01Dashboard.LoadBalancerFullName
+  TargetGroup02Ref:
+      Description: TargetGroup2
+      Value: !GetAtt TargetGroup02.TargetGroupFullName
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", TargetGroup02 ] ]
+  TargetGroup02ARNRef:
+      Description: TargetGroup2
+      Value: !Ref TargetGroup02
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", TargetGroup02Arn ] ]
+  LBDashboardRef:
+      Description: LBDashboard full name
+      Value: !GetAtt LBDashboard.LoadBalancerFullName
       Export:
         Name: !Join [ ":", [ !Ref "AWS::StackName", LBDashboard ] ]
-  PublicLoadBalancer01ARNRef:
-      Description: PublicLoadBalancer Arn
-      Value: !Ref PublicLoadBalancer01Dashboard
+  LBDashboardARNRef:
+      Description: LBDashboard Arn
+      Value: !Ref LBDashboard
       Export:
         Name: !Join [ ":", [ !Ref "AWS::StackName", LBDashboardArn ] ]
-  PublicLoadBalancer02Ref:
-    Description: PublicLoadBalancer full name
-    Value: !GetAtt PublicLoadBalancer02Form.LoadBalancerFullName
-    Export:
-      Name: !Join [ ":", [ !Ref "AWS::StackName", LBForm ] ]
-  PublicLoadBalancer02ARNRef:
-    Description: PublicLoadBalancer Arn
-    Value: !Ref PublicLoadBalancer02Form
-    Export:
-      Name: !Join [ ":", [ !Ref "AWS::StackName", LBFormArn ] ]
+  LBFormRef:
+      Description: LBForm full name
+      Value: !GetAtt LBForm.LoadBalancerFullName
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", LBForm ] ]
+  LBFormARNRef:
+      Description: LBForm Arn
+      Value: !Ref LBForm
+      Export:
+        Name: !Join [ ":", [ !Ref "AWS::StackName", LBFormArn ] ]
