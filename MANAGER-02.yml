@@ -4,6 +4,10 @@ Parameters:
     Type: String
     Default: Assessment1key
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Resources
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 Resources:
     InstanceSecurityGroup:
       Type: AWS::EC2::SecurityGroup
@@ -45,12 +49,20 @@ Resources:
             ToPort: 2377
             CidrIp: 0.0.0.0/0
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#IAM EC2 profile voor push
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
     DockerImagePushInstanceProfile:
       Type: AWS::IAM::InstanceProfile
       Properties:
         Path: "/"
         Roles:
           - !Ref DockerImagePushRole
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#IAM Policy koppelen aan Role voor push
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     DockerImagePushPolicy:
       Type: AWS::IAM::Policy
@@ -77,6 +89,10 @@ Resources:
         Roles:
           - !Ref DockerImagePushRole
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Image Push Role voor ec2 instances
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
     DockerImagePushRole:
       Type: AWS::IAM::Role
       Properties:
@@ -90,6 +106,10 @@ Resources:
               Action:
                 - 'sts:AssumeRole'
         Path: /
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#BroadBuildServer (manager) - Docker manager, Crontab voor nightly builds, services op IP
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     BroadBuildServer01:
         Type: AWS::EC2::Instance
@@ -113,26 +133,34 @@ Resources:
                 mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ${EFSID}.efs.us-east-1.amazonaws.com:/ /usr/share/docker-storage
                 service docker start
                 docker swarm init
-                cd /usr/share/docker-storage
+                cd /usr/share/docker-storage/
                 docker swarm join-token -q worker > worker-join-token.txt
                 ls | aws ecr get-login --no-include-email --region us-east-1 | xargs -L 1 xargs -t
-                mkdir /usr/share/containers
-                cd /usr/share/containers
+                mkdir -p /usr/local/bin/scripts
+                cd /user/local/bin/scripts/
+                cat > buildscript.sh <<EOF
+                cd /user/local/bin/scripts/
                 git clone https://github.com/looking4ward/nhs-cac-docker-dotnetwebapp.git
-                cd nhs-cac-docker-dotnetwebapp
-                docker build -t form:latest .
-                cd ../
                 git clone https://github.com/broadinstitute/covid19-testing.git
-                cd covid19-testing
                 cat > Dockerfile <<EOF
                 FROM httpd:2.4
                 COPY ./* /usr/local/apache2/htdocs/
                 EOF
-                docker build -t dashboard:latest .
+                mv Dockerfile covid19-testing
+                docker build -t form:latest ./nhs-cac-docker-dotnetwebapp
+                docker build -t dashboard:latest ./covid19-testing
                 docker tag dashboard ${ECRDashboardID}
                 docker tag form ${ECRFormID}
                 docker push ${ECRFormID}
                 docker push ${ECRDashboardID}
+                rm -rf nhs-cac-docker-dotnetwebapp
+                rm -rf covid19-testing
+                EOF
+                chmod +x ./buildscript.sh
+                ./buildscript.sh
+                cd /var/spool/cron/
+                echo "* * * * * /usr/local/bin/scripts/buildscript.sh" | sudo tee -a /var/spool/cron/root
+                crontab -l
                 cd /
                 mkdir /compose
                 cd /compose
@@ -157,6 +185,10 @@ Resources:
                 ECRDashboardID: !ImportValue ECR-02:ECRDashboardID
                 ECRFormID: !ImportValue ECR-02:ECRFormID
           KeyName: !Ref Key
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Outputs
+#--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Outputs:
   IAMRoleRef:
