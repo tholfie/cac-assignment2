@@ -116,6 +116,11 @@ Resources:
         Properties:
           ImageId: ami-032930428bf1abbff
           InstanceType: t2.micro
+          Tags:
+            - Key: Name
+              Value: BroadBuildServer01
+            - Key: Module
+              Value: Automation
           SubnetId: !ImportValue Base01:PublicSubnet01:us-east-1a
           IamInstanceProfile: !Ref DockerImagePushInstanceProfile
           SecurityGroupIds: [ !Ref InstanceSecurityGroup ]
@@ -137,29 +142,33 @@ Resources:
                 docker swarm join-token -q worker > worker-join-token.txt
                 ls | aws ecr get-login --no-include-email --region us-east-1 | xargs -L 1 xargs -t
                 mkdir -p /usr/local/bin/scripts
-                cd /user/local/bin/scripts/
-                cat > buildscript.sh <<EOF
-                cd /user/local/bin/scripts/
-                git clone https://github.com/looking4ward/nhs-cac-docker-dotnetwebapp.git
-                git clone https://github.com/broadinstitute/covid19-testing.git
+                cd /usr/local/bin/scripts/
                 cat > Dockerfile <<EOF
                 FROM httpd:2.4
                 COPY ./* /usr/local/apache2/htdocs/
+                RUN ln -sf /dev/stdout /var/log/access.log
+                RUN ln -sf /dev/stderr /var/log/error.log
                 EOF
-                mv Dockerfile covid19-testing
+                git clone https://github.com/looking4ward/nhs-cac-docker-dotnetwebapp.git
+                git clone https://github.com/broadinstitute/covid19-testing.git
+                cat > buildscript.sh <<EOF
+                cd /usr/local/bin/scripts/covid19-testing
+                git pull
+                cd /usr/local/bin/scripts/nhs-cac-docker-dotnetwebapp
+                git pull
+                cd /usr/local/bin/scripts
                 docker build -t form:latest ./nhs-cac-docker-dotnetwebapp
                 docker build -t dashboard:latest ./covid19-testing
-                docker tag dashboard ${ECRDashboardID}
-                docker tag form ${ECRFormID}
-                docker push ${ECRFormID}
-                docker push ${ECRDashboardID}
-                rm -rf nhs-cac-docker-dotnetwebapp
-                rm -rf covid19-testing
+                docker tag dashboard:latest ${ECRDashboardID}:latest
+                docker tag form:latest ${ECRFormID}:latest
+                docker push ${ECRFormID}:latest
+                docker push ${ECRDashboardID}:latest
                 EOF
+                cp Dockerfile covid19-testing
                 chmod +x ./buildscript.sh
                 ./buildscript.sh
                 cd /var/spool/cron/
-                echo "* * * * * /usr/local/bin/scripts/buildscript.sh" | sudo tee -a /var/spool/cron/root
+                echo "*/10 * * * * /usr/local/bin/scripts/buildscript.sh" | sudo tee -a /var/spool/cron/root
                 crontab -l
                 cd /
                 mkdir /compose
