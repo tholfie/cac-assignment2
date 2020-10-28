@@ -168,7 +168,7 @@ Resources:
                 chmod +x ./buildscript.sh
                 ./buildscript.sh
                 cd /var/spool/cron/
-                echo "*/10 * * * * /usr/local/bin/scripts/buildscript.sh" | sudo tee -a /var/spool/cron/root
+                echo "0 2 * * * /usr/local/bin/scripts/buildscript.sh" | sudo tee -a /var/spool/cron/root
                 crontab -l
                 cd /
                 mkdir /compose
